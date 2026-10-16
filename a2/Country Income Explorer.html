@@ -1,0 +1,415 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Country Income Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: title and filters on top, a stat row that follows the selection, then two linked charts side by side (stacked on phones), table view last. */
+:root {
+  --bg: #f9f9f7;
+  --panel: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --line: rgba(11, 11, 11, 0.12);
+  --dec: #2a78d6;
+  --inc: #eb6834;
+  --off: #c3c2b7;
+  --boxfill: #ebeae5;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d0d0d; --panel: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --line: rgba(255, 255, 255, 0.14);
+    --dec: #3987e5; --inc: #d95926; --off: #4a4a46; --boxfill: #262624;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d0d0d; --panel: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --line: rgba(255, 255, 255, 0.14);
+  --dec: #3987e5; --inc: #d95926; --off: #4a4a46; --boxfill: #262624;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.45;
+  padding-block: 24px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+h1 { font-size: 26px; line-height: 1.15; font-weight: 650; margin: 0 0 6px; letter-spacing: -0.01em; text-wrap: balance; }
+.lede { margin: 0; color: var(--ink2); max-width: 70ch; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: flex-end; }
+.grp { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.lbl { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink2); font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--panel);
+  color: var(--ink2); padding: 6px 11px; border-radius: 999px; font: inherit; font-size: 13px; cursor: pointer;
+}
+.chip:hover { border-color: var(--ink2); }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip:disabled { opacity: 0.45; cursor: default; }
+.chip:focus-visible, .sw input:focus-visible, th button:focus-visible, summary:focus-visible { outline: 2px solid var(--dec); outline-offset: 2px; }
+.sw { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); padding: 6px 0; cursor: pointer; }
+.row-end { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.stat { padding: 10px 14px 10px 0; min-width: 0; }
+.stat .k { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink2); font-weight: 600; }
+.stat .v { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat .v small { font-size: 12px; font-weight: 400; color: var(--ink2); }
+
+.charts { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 900px) { .charts { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 14px 10px; margin: 0; min-width: 0; }
+.panel h2 { font-size: 15px; margin: 0; font-weight: 650; }
+.sub { margin: 2px 0 8px; color: var(--ink2); font-size: 12.5px; }
+.svgwrap { min-width: 0; }
+svg { display: block; width: 100%; overflow: visible; }
+#scSvg { cursor: crosshair; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.gl { stroke: var(--grid); stroke-width: 1; }
+.tk { fill: var(--ink2); font-size: 11px; }
+.axt { fill: var(--ink2); font-size: 12px; }
+.fit { fill: none; stroke: var(--ink); stroke-width: 2; }
+.band { fill: var(--ink); opacity: 0.09; }
+.pt { fill-opacity: 0.8; stroke: var(--panel); stroke-width: 1; }
+.pt.inc { fill: var(--inc); }
+.pt.dec { fill: var(--dec); }
+.pt.off { fill: var(--off); fill-opacity: 0.35; pointer-events: none; }
+.pt.hl { stroke: var(--ink); stroke-width: 2; }
+.lab { fill: var(--ink); font-size: 11px; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+.brush { fill: var(--dec); fill-opacity: 0.08; stroke: var(--ink); stroke-dasharray: 4 3; stroke-width: 1.2; pointer-events: none; }
+.box { fill: var(--boxfill); stroke: var(--ink2); stroke-width: 1.2; }
+.whisk { stroke: var(--ink2); stroke-width: 1.2; }
+.med { stroke: var(--ink); stroke-width: 2.4; }
+.amed { stroke: var(--ink); stroke-width: 2; stroke-dasharray: 3 3; }
+.bandhit { fill: transparent; cursor: pointer; }
+.bandsel { fill: var(--ink); opacity: 0.06; pointer-events: none; }
+.lv { fill: var(--ink2); font-size: 12px; cursor: pointer; }
+.lv.sel { fill: var(--ink); font-weight: 700; }
+.lv.sm { font-size: 11px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; font-size: 12px; color: var(--ink2); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot.dec { background: var(--dec); }
+.dot.inc { background: var(--inc); }
+
+details.tbl { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+details.tbl summary { cursor: pointer; font-weight: 650; font-size: 14px; }
+.tw { overflow-x: auto; margin-top: 10px; max-height: 420px; overflow-y: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+td.n, th.n { text-align: right; padding-right: 18px; }
+th { position: sticky; top: 0; background: var(--panel); }
+th button { all: unset; cursor: pointer; font-weight: 650; color: var(--ink2); font-size: 12px; }
+th[aria-sort] button { color: var(--ink); }
+
+footer { color: var(--ink2); font-size: 12px; max-width: 95ch; }
+#tip {
+  position: fixed; z-index: 30; pointer-events: none; background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; font-size: 12.5px; max-width: 230px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+#tip strong { display: block; font-size: 13px; }
+#tip .m { color: var(--ink2); margin-bottom: 4px; display: block; }
+#tip dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; }
+#tip dt { color: var(--ink2); }
+#tip dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<main class="wrap">
+  <header>
+    <h1>Country income explorer</h1>
+    <p class="lede">193 countries, three measures. Drag a box on the scatter plot to select countries and the CO₂ chart follows. Filter by region or income level, and hover any mark to see the country.</p>
+  </header>
+
+  <section class="controls" aria-label="Filters">
+    <div class="grp"><span class="lbl">Region</span><div class="chips" id="regChips"></div></div>
+    <div class="grp"><span class="lbl">Income level</span><div class="chips" id="lvlChips"></div></div>
+    <div class="grp"><span class="lbl">View</span>
+      <div class="row-end">
+        <label class="sw"><input type="checkbox" id="sizeTog" checked> Size by population</label>
+        <button class="chip" id="resetBtn" type="button">Reset</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="stats" id="stats" aria-live="polite"></section>
+
+  <section class="charts">
+    <figure class="panel">
+      <h2>Income and life expectancy</h2>
+      <p class="sub">Black curve: LOESS fit on all countries, shaded band is the 90% bootstrap range. The x-axis is logarithmic, so equal distances mean equal ratios.</p>
+      <div class="svgwrap"><svg id="scSvg" role="img" aria-label="Scatter plot of income per person against life expectancy for 193 countries. The table view below lists the same data."></svg></div>
+      <div class="legend" id="scLegend"></div>
+    </figure>
+    <figure class="panel">
+      <h2>CO₂ per person by income level</h2>
+      <p class="sub">Boxes show quartiles of all countries in the level, using raw values on a logarithmic axis (each gridline is ×10). Click a level to filter.</p>
+      <div class="svgwrap"><svg id="bxSvg" role="img" aria-label="Box plot of CO2 emissions per person for each of four income levels, with one dot per country. The table view below lists the same data."></svg></div>
+      <div class="legend" id="bxLegend"></div>
+    </figure>
+  </section>
+
+  <details class="tbl" id="tblWrap">
+    <summary id="tblSum">Table view</summary>
+    <div class="tw"><table id="tbl"></table></div>
+  </details>
+
+  <footer>
+    Source: assignment2_data.csv. The file has no data dictionary, so units are read from the value ranges: income in thousands per person, CO₂ in tonnes per person, population in millions. Income levels 1 to 4 run from lowest to highest income. Fitted curve: LOESS with span 0.5 on log income; band from 200 bootstrap resamples (5th to 95th percentile).
+  </footer>
+</main>
+<div id="tip" role="tooltip" hidden></div>
+
+<script>
+(function () {
+  const D = {"rows": [{"c": "Afghanistan", "r": "Asia", "inc": 2.03, "lvl": "Level 1", "le": 62.7, "co2": 0.254, "ch": "increase", "pop": 37.2}, {"c": "Albania", "r": "Europe", "inc": 13.3, "lvl": "Level 3", "le": 78.4, "co2": 1.59, "ch": "increase", "pop": 2.88}, {"c": "Algeria", "r": "Africa", "inc": 11.6, "lvl": "Level 3", "le": 76.0, "co2": 3.69, "ch": "increase", "pop": 42.2}, {"c": "Andorra", "r": "Europe", "inc": 58.3, "lvl": "Level 4", "le": 82.1, "co2": 6.12, "ch": "decrease", "pop": 0.077}, {"c": "Angola", "r": "Africa", "inc": 6.93, "lvl": "Level 2", "le": 64.6, "co2": 1.12, "ch": "decrease", "pop": 30.8}, {"c": "Antigua and Barbuda", "r": "Americas", "inc": 21.0, "lvl": "Level 3", "le": 76.2, "co2": 5.88, "ch": "increase", "pop": 0.0963}, {"c": "Argentina", "r": "Americas", "inc": 22.7, "lvl": "Level 3", "le": 76.5, "co2": 4.41, "ch": "decrease", "pop": 44.4}, {"c": "Armenia", "r": "Europe", "inc": 12.7, "lvl": "Level 3", "le": 75.6, "co2": 1.89, "ch": "decrease", "pop": 2.95}, {"c": "Australia", "r": "Asia", "inc": 49.0, "lvl": "Level 4", "le": 82.9, "co2": 16.9, "ch": "decrease", "pop": 24.9}, {"c": "Austria", "r": "Europe", "inc": 55.3, "lvl": "Level 4", "le": 82.1, "co2": 7.75, "ch": "decrease", "pop": 8.89}, {"c": "Azerbaijan", "r": "Europe", "inc": 14.2, "lvl": "Level 3", "le": 70.8, "co2": 3.7, "ch": "decrease", "pop": 9.95}, {"c": "Bahamas", "r": "Americas", "inc": 36.5, "lvl": "Level 4", "le": 73.8, "co2": 4.7, "ch": "decrease", "pop": 0.386}, {"c": "Bahrain", "r": "Asia", "inc": 46.4, "lvl": "Level 4", "le": 77.0, "co2": 19.8, "ch": "decrease", "pop": 1.57}, {"c": "Bangladesh", "r": "Asia", "inc": 4.44, "lvl": "Level 2", "le": 74.2, "co2": 0.531, "ch": "increase", "pop": 161.0}, {"c": "Barbados", "r": "Americas", "inc": 15.7, "lvl": "Level 3", "le": 76.5, "co2": 4.48, "ch": "decrease", "pop": 0.287}, {"c": "Belarus", "r": "Europe", "inc": 19.0, "lvl": "Level 3", "le": 74.0, "co2": 6.93, "ch": "decrease", "pop": 9.45}, {"c": "Belgium", "r": "Europe", "inc": 51.1, "lvl": "Level 4", "le": 81.4, "co2": 8.69, "ch": "decrease", "pop": 11.5}, {"c": "Belize", "r": "Americas", "inc": 7.26, "lvl": "Level 2", "le": 74.4, "co2": 1.5, "ch": "increase", "pop": 0.383}, {"c": "Benin", "r": "Africa", "inc": 3.16, "lvl": "Level 2", "le": 64.0, "co2": 0.623, "ch": "increase", "pop": 11.5}, {"c": "Bhutan", "r": "Asia", "inc": 11.3, "lvl": "Level 3", "le": 73.0, "co2": 1.61, "ch": "increase", "pop": 0.754}, {"c": "Bolivia", "r": "Americas", "inc": 8.66, "lvl": "Level 3", "le": 71.8, "co2": 1.96, "ch": "increase", "pop": 11.4}, {"c": "Bosnia and Herzegovina", "r": "Europe", "inc": 14.4, "lvl": "Level 3", "le": 76.9, "co2": 6.53, "ch": "increase", "pop": 3.32}, {"c": "Botswana", "r": "Africa", "inc": 16.2, "lvl": "Level 3", "le": 61.8, "co2": 2.96, "ch": "increase", "pop": 2.25}, {"c": "Brazil", "r": "Americas", "inc": 14.7, "lvl": "Level 3", "le": 75.7, "co2": 2.18, "ch": "increase", "pop": 209.0}, {"c": "Brunei", "r": "Asia", "inc": 60.4, "lvl": "Level 4", "le": 74.2, "co2": 18.5, "ch": "decrease", "pop": 0.429}, {"c": "Bulgaria", "r": "Europe", "inc": 22.2, "lvl": "Level 3", "le": 73.3, "co2": 6.32, "ch": "decrease", "pop": 7.05}, {"c": "Burkina Faso", "r": "Africa", "inc": 2.12, "lvl": "Level 1", "le": 61.3, "co2": 0.198, "ch": "increase", "pop": 19.8}, {"c": "Burundi", "r": "Africa", "inc": 0.762, "lvl": "Level 1", "le": 63.4, "co2": 0.0467, "ch": "increase", "pop": 11.2}, {"c": "Cambodia", "r": "Asia", "inc": 4.16, "lvl": "Level 2", "le": 69.7, "co2": 0.64, "ch": "increase", "pop": 16.2}, {"c": "Cameroon", "r": "Africa", "inc": 3.71, "lvl": "Level 2", "le": 62.6, "co2": 0.323, "ch": "increase", "pop": 25.2}, {"c": "Canada", "r": "Americas", "inc": 49.0, "lvl": "Level 4", "le": 82.2, "co2": 15.3, "ch": "decrease", "pop": 37.1}, {"c": "Cape Verde", "r": "Africa", "inc": 6.86, "lvl": "Level 2", "le": 73.5, "co2": 1.16, "ch": "increase", "pop": 0.544}, {"c": "Central African Republic", "r": "Africa", "inc": 0.933, "lvl": "Level 1", "le": 51.5, "co2": 0.0651, "ch": "increase", "pop": 4.67}, {"c": "Chad", "r": "Africa", "inc": 1.58, "lvl": "Level 1", "le": 59.9, "co2": 0.0656, "ch": "decrease", "pop": 15.5}, {"c": "Chile", "r": "Americas", "inc": 25.0, "lvl": "Level 4", "le": 80.1, "co2": 4.59, "ch": "increase", "pop": 18.7}, {"c": "China", "r": "Asia", "inc": 15.1, "lvl": "Level 3", "le": 77.4, "co2": 7.06, "ch": "increase", "pop": 1430.0}, {"c": "Colombia", "r": "Americas", "inc": 14.3, "lvl": "Level 3", "le": 80.1, "co2": 1.96, "ch": "increase", "pop": 49.7}, {"c": "Comoros", "r": "Africa", "inc": 3.07, "lvl": "Level 2", "le": 68.5, "co2": 0.263, "ch": "increase", "pop": 0.832}, {"c": "Congo, Dem. Rep.", "r": "Africa", "inc": 1.09, "lvl": "Level 1", "le": 64.7, "co2": 0.0243, "ch": "decrease", "pop": 84.1}, {"c": "Congo, Rep.", "r": "Africa", "inc": 3.93, "lvl": "Level 2", "le": 65.0, "co2": 0.617, "ch": "increase", "pop": 5.24}, {"c": "Costa Rica", "r": "Americas", "inc": 20.7, "lvl": "Level 3", "le": 80.0, "co2": 1.61, "ch": "decrease", "pop": 5.0}, {"c": "Cote d'Ivoire", "r": "Africa", "inc": 4.85, "lvl": "Level 2", "le": 63.6, "co2": 0.335, "ch": "decrease", "pop": 25.1}, {"c": "Croatia", "r": "Europe", "inc": 28.2, "lvl": "Level 4", "le": 78.6, "co2": 4.48, "ch": "decrease", "pop": 4.16}, {"c": "Cuba", "r": "Americas", "inc": 9.68, "lvl": "Level 3", "le": 78.3, "co2": 2.53, "ch": "increase", "pop": 11.3}, {"c": "Cyprus", "r": "Europe", "inc": 40.0, "lvl": "Level 4", "le": 80.8, "co2": 6.3, "ch": "decrease", "pop": 1.19}, {"c": "Czech Republic", "r": "Europe", "inc": 39.9, "lvl": "Level 4", "le": 79.3, "co2": 9.94, "ch": "decrease", "pop": 10.7}, {"c": "Denmark", "r": "Europe", "inc": 56.2, "lvl": "Level 4", "le": 81.1, "co2": 6.06, "ch": "decrease", "pop": 5.75}, {"c": "Djibouti", "r": "Africa", "inc": 5.21, "lvl": "Level 2", "le": 66.7, "co2": 0.672, "ch": "increase", "pop": 0.959}, {"c": "Dominica", "r": "Americas", "inc": 11.5, "lvl": "Level 3", "le": 72.3, "co2": 2.55, "ch": "increase", "pop": 0.0716}, {"c": "Dominican Republic", "r": "Americas", "inc": 17.7, "lvl": "Level 3", "le": 72.9, "co2": 2.34, "ch": "increase", "pop": 10.6}, {"c": "Ecuador", "r": "Americas", "inc": 11.6, "lvl": "Level 3", "le": 76.2, "co2": 2.46, "ch": "increase", "pop": 17.1}, {"c": "Egypt", "r": "Africa", "inc": 11.4, "lvl": "Level 3", "le": 70.7, "co2": 2.43, "ch": "decrease", "pop": 98.4}, {"c": "El Salvador", "r": "Americas", "inc": 8.62, "lvl": "Level 3", "le": 75.6, "co2": 1.11, "ch": "increase", "pop": 6.42}, {"c": "Equatorial Guinea", "r": "Africa", "inc": 20.4, "lvl": "Level 3", "le": 65.8, "co2": 4.35, "ch": "decrease", "pop": 1.31}, {"c": "Eritrea", "r": "Africa", "inc": 1.56, "lvl": "Level 1", "le": 63.4, "co2": 0.215, "ch": "increase", "pop": 3.45}, {"c": "Estonia", "r": "Europe", "inc": 35.1, "lvl": "Level 4", "le": 77.9, "co2": 14.8, "ch": "increase", "pop": 1.32}, {"c": "Eswatini", "r": "Africa", "inc": 8.52, "lvl": "Level 3", "le": 57.8, "co2": 1.06, "ch": "decrease", "pop": 1.14}, {"c": "Ethiopia", "r": "Africa", "inc": 2.1, "lvl": "Level 1", "le": 68.4, "co2": 0.137, "ch": "increase", "pop": 109.0}, {"c": "Fiji", "r": "Asia", "inc": 13.8, "lvl": "Level 3", "le": 68.3, "co2": 2.41, "ch": "increase", "pop": 0.883}, {"c": "Finland", "r": "Europe", "inc": 48.0, "lvl": "Level 4", "le": 81.8, "co2": 8.52, "ch": "decrease", "pop": 5.52}, {"c": "France", "r": "Europe", "inc": 45.3, "lvl": "Level 4", "le": 82.9, "co2": 5.2, "ch": "decrease", "pop": 65.0}, {"c": "Gabon", "r": "Africa", "inc": 14.7, "lvl": "Level 3", "le": 67.5, "co2": 2.53, "ch": "decrease", "pop": 2.12}, {"c": "Gambia", "r": "Africa", "inc": 2.16, "lvl": "Level 1", "le": 66.4, "co2": 0.268, "ch": "increase", "pop": 2.28}, {"c": "Georgia", "r": "Europe", "inc": 14.3, "lvl": "Level 3", "le": 73.3, "co2": 2.64, "ch": "increase", "pop": 4.0}, {"c": "Germany", "r": "Europe", "inc": 53.5, "lvl": "Level 4", "le": 81.2, "co2": 9.14, "ch": "decrease", "pop": 83.1}, {"c": "Ghana", "r": "Africa", "inc": 5.32, "lvl": "Level 2", "le": 65.8, "co2": 0.615, "ch": "increase", "pop": 29.8}, {"c": "Greece", "r": "Europe", "inc": 29.1, "lvl": "Level 4", "le": 81.0, "co2": 7.03, "ch": "decrease", "pop": 10.5}, {"c": "Grenada", "r": "Americas", "inc": 16.8, "lvl": "Level 3", "le": 73.2, "co2": 2.43, "ch": "increase", "pop": 0.111}, {"c": "Guatemala", "r": "Americas", "inc": 8.46, "lvl": "Level 3", "le": 72.4, "co2": 1.07, "ch": "increase", "pop": 17.2}, {"c": "Guinea", "r": "Africa", "inc": 2.5, "lvl": "Level 1", "le": 60.6, "co2": 0.256, "ch": "increase", "pop": 12.4}, {"c": "Guinea-Bissau", "r": "Africa", "inc": 1.9, "lvl": "Level 1", "le": 60.3, "co2": 0.181, "ch": "increase", "pop": 1.87}, {"c": "Guyana", "r": "Americas", "inc": 12.5, "lvl": "Level 3", "le": 67.1, "co2": 3.12, "ch": "increase", "pop": 0.779}, {"c": "Haiti", "r": "Americas", "inc": 3.17, "lvl": "Level 2", "le": 63.5, "co2": 0.27, "ch": "increase", "pop": 11.1}, {"c": "Honduras", "r": "Americas", "inc": 5.68, "lvl": "Level 2", "le": 71.9, "co2": 1.04, "ch": "decrease", "pop": 9.59}, {"c": "Hong Kong, China", "r": "Asia", "inc": 61.1, "lvl": "Level 4", "le": 84.3, "co2": 5.86, "ch": "decrease", "pop": 7.37}, {"c": "Hungary", "r": "Europe", "inc": 31.1, "lvl": "Level 4", "le": 76.3, "co2": 5.14, "ch": "decrease", "pop": 9.71}, {"c": "Iceland", "r": "Europe", "inc": 56.8, "lvl": "Level 4", "le": 84.0, "co2": 10.8, "ch": "decrease", "pop": 0.337}, {"c": "India", "r": "Asia", "inc": 6.52, "lvl": "Level 2", "le": 70.5, "co2": 1.96, "ch": "increase", "pop": 1350.0}, {"c": "Indonesia", "r": "Asia", "inc": 11.4, "lvl": "Level 3", "le": 71.1, "co2": 2.3, "ch": "increase", "pop": 268.0}, {"c": "Iran", "r": "Asia", "inc": 13.5, "lvl": "Level 3", "le": 77.6, "co2": 8.81, "ch": "increase", "pop": 81.8}, {"c": "Iraq", "r": "Asia", "inc": 10.6, "lvl": "Level 3", "le": 73.3, "co2": 5.32, "ch": "increase", "pop": 38.4}, {"c": "Ireland", "r": "Europe", "inc": 83.7, "lvl": "Level 4", "le": 82.0, "co2": 8.09, "ch": "decrease", "pop": 4.82}, {"c": "Israel", "r": "Asia", "inc": 39.9, "lvl": "Level 4", "le": 83.0, "co2": 7.67, "ch": "decrease", "pop": 8.38}, {"c": "Italy", "r": "Europe", "inc": 42.0, "lvl": "Level 4", "le": 83.1, "co2": 5.58, "ch": "decrease", "pop": 60.6}, {"c": "Jamaica", "r": "Americas", "inc": 9.74, "lvl": "Level 3", "le": 76.3, "co2": 2.79, "ch": "decrease", "pop": 2.93}, {"c": "Japan", "r": "Asia", "inc": 41.8, "lvl": "Level 4", "le": 84.8, "co2": 9.14, "ch": "decrease", "pop": 127.0}, {"c": "Jordan", "r": "Asia", "inc": 10.0, "lvl": "Level 3", "le": 77.9, "co2": 2.42, "ch": "decrease", "pop": 9.97}, {"c": "Kazakhstan", "r": "Asia", "inc": 25.5, "lvl": "Level 4", "le": 71.7, "co2": 17.6, "ch": "increase", "pop": 18.3}, {"c": "Kenya", "r": "Africa", "inc": 4.34, "lvl": "Level 2", "le": 66.1, "co2": 0.36, "ch": "increase", "pop": 51.4}, {"c": "Kiribati", "r": "Asia", "inc": 2.29, "lvl": "Level 1", "le": 59.3, "co2": 0.601, "ch": "decrease", "pop": 0.116}, {"c": "Kuwait", "r": "Asia", "inc": 50.5, "lvl": "Level 4", "le": 81.6, "co2": 23.7, "ch": "decrease", "pop": 4.14}, {"c": "Kyrgyz Republic", "r": "Asia", "inc": 5.13, "lvl": "Level 2", "le": 73.3, "co2": 1.6, "ch": "increase", "pop": 6.3}, {"c": "Lao", "r": "Asia", "inc": 7.59, "lvl": "Level 2", "le": 68.6, "co2": 2.74, "ch": "increase", "pop": 7.06}, {"c": "Latvia", "r": "Europe", "inc": 30.1, "lvl": "Level 4", "le": 75.8, "co2": 3.73, "ch": "decrease", "pop": 1.93}, {"c": "Lebanon", "r": "Asia", "inc": 15.7, "lvl": "Level 3", "le": 76.2, "co2": 3.53, "ch": "decrease", "pop": 6.86}, {"c": "Lesotho", "r": "Africa", "inc": 2.62, "lvl": "Level 1", "le": 51.4, "co2": 1.26, "ch": "increase", "pop": 2.11}, {"c": "Liberia", "r": "Africa", "inc": 1.54, "lvl": "Level 1", "le": 65.7, "co2": 0.324, "ch": "increase", "pop": 4.82}, {"c": "Libya", "r": "Africa", "inc": 15.0, "lvl": "Level 3", "le": 75.7, "co2": 8.09, "ch": "decrease", "pop": 6.68}, {"c": "Lithuania", "r": "Europe", "inc": 35.4, "lvl": "Level 4", "le": 76.1, "co2": 4.84, "ch": "increase", "pop": 2.8}, {"c": "Luxembourg", "r": "Europe", "inc": 115.0, "lvl": "Level 4", "le": 82.9, "co2": 15.9, "ch": "decrease", "pop": 0.604}, {"c": "Madagascar", "r": "Africa", "inc": 1.59, "lvl": "Level 1", "le": 65.1, "co2": 0.163, "ch": "increase", "pop": 26.3}, {"c": "Malawi", "r": "Africa", "inc": 1.5, "lvl": "Level 1", "le": 64.1, "co2": 0.0762, "ch": "decrease", "pop": 18.1}, {"c": "Malaysia", "r": "Asia", "inc": 27.6, "lvl": "Level 4", "le": 75.2, "co2": 8.08, "ch": "increase", "pop": 31.5}, {"c": "Maldives", "r": "Asia", "inc": 18.8, "lvl": "Level 3", "le": 79.0, "co2": 2.96, "ch": "increase", "pop": 0.516}, {"c": "Mali", "r": "Africa", "inc": 2.28, "lvl": "Level 1", "le": 61.2, "co2": 0.187, "ch": "increase", "pop": 19.1}, {"c": "Malta", "r": "Europe", "inc": 43.3, "lvl": "Level 4", "le": 82.5, "co2": 3.61, "ch": "decrease", "pop": 0.439}, {"c": "Marshall Islands", "r": "Asia", "inc": 3.82, "lvl": "Level 2", "le": 65.3, "co2": 2.58, "ch": "increase", "pop": 0.0584}, {"c": "Mauritania", "r": "Africa", "inc": 5.19, "lvl": "Level 2", "le": 70.5, "co2": 0.605, "ch": "increase", "pop": 4.4}, {"c": "Mauritius", "r": "Africa", "inc": 22.2, "lvl": "Level 3", "le": 75.3, "co2": 3.83, "ch": "increase", "pop": 1.27}, {"c": "Mexico", "r": "Americas", "inc": 19.9, "lvl": "Level 3", "le": 75.5, "co2": 3.79, "ch": "decrease", "pop": 126.0}, {"c": "Micronesia, Fed. Sts.", "r": "Asia", "inc": 3.46, "lvl": "Level 2", "le": 64.1, "co2": 1.34, "ch": "increase", "pop": 0.113}, {"c": "Moldova", "r": "Europe", "inc": 12.4, "lvl": "Level 3", "le": 74.0, "co2": 1.27, "ch": "increase", "pop": 4.05}, {"c": "Mongolia", "r": "Asia", "inc": 12.0, "lvl": "Level 3", "le": 68.0, "co2": 8.88, "ch": "increase", "pop": 3.17}, {"c": "Montenegro", "r": "Europe", "inc": 20.7, "lvl": "Level 3", "le": 75.6, "co2": 3.2, "ch": "decrease", "pop": 0.628}, {"c": "Morocco", "r": "Africa", "inc": 7.45, "lvl": "Level 2", "le": 73.1, "co2": 1.84, "ch": "increase", "pop": 36.0}, {"c": "Mozambique", "r": "Africa", "inc": 1.29, "lvl": "Level 1", "le": 57.9, "co2": 0.281, "ch": "increase", "pop": 29.5}, {"c": "Myanmar", "r": "Asia", "inc": 4.47, "lvl": "Level 2", "le": 69.1, "co2": 0.491, "ch": "increase", "pop": 53.7}, {"c": "Namibia", "r": "Africa", "inc": 10.1, "lvl": "Level 3", "le": 64.7, "co2": 1.75, "ch": "increase", "pop": 2.45}, {"c": "Nauru", "r": "Asia", "inc": 13.6, "lvl": "Level 3", "le": 63.2, "co2": 4.71, "ch": "increase", "pop": 0.0107}, {"c": "Nepal", "r": "Asia", "inc": 3.77, "lvl": "Level 2", "le": 70.8, "co2": 0.337, "ch": "increase", "pop": 28.1}, {"c": "Netherlands", "r": "Europe", "inc": 56.1, "lvl": "Level 4", "le": 81.7, "co2": 9.48, "ch": "decrease", "pop": 17.1}, {"c": "New Zealand", "r": "Asia", "inc": 42.9, "lvl": "Level 4", "le": 81.8, "co2": 7.34, "ch": "decrease", "pop": 4.74}, {"c": "Nicaragua", "r": "Americas", "inc": 5.73, "lvl": "Level 2", "le": 75.2, "co2": 0.862, "ch": "increase", "pop": 6.47}, {"c": "Niger", "r": "Africa", "inc": 1.2, "lvl": "Level 1", "le": 62.0, "co2": 0.103, "ch": "increase", "pop": 22.4}, {"c": "Nigeria", "r": "Africa", "inc": 5.16, "lvl": "Level 2", "le": 63.8, "co2": 0.65, "ch": "increase", "pop": 196.0}, {"c": "North Korea", "r": "Asia", "inc": 1.86, "lvl": "Level 1", "le": 72.9, "co2": 1.18, "ch": "decrease", "pop": 25.5}, {"c": "North Macedonia", "r": "Europe", "inc": 16.1, "lvl": "Level 3", "le": 74.3, "co2": 3.49, "ch": "decrease", "pop": 2.08}, {"c": "Norway", "r": "Europe", "inc": 64.3, "lvl": "Level 4", "le": 82.8, "co2": 8.31, "ch": "decrease", "pop": 5.34}, {"c": "Oman", "r": "Asia", "inc": 32.6, "lvl": "Level 4", "le": 73.6, "co2": 13.9, "ch": "decrease", "pop": 4.83}, {"c": "Pakistan", "r": "Asia", "inc": 4.74, "lvl": "Level 2", "le": 65.5, "co2": 1.05, "ch": "increase", "pop": 212.0}, {"c": "Palau", "r": "Asia", "inc": 17.6, "lvl": "Level 3", "le": 67.4, "co2": 13.2, "ch": "increase", "pop": 0.0179}, {"c": "Palestine", "r": "Asia", "inc": 6.32, "lvl": "Level 2", "le": 74.7, "co2": 0.661, "ch": "increase", "pop": 4.86}, {"c": "Panama", "r": "Americas", "inc": 31.0, "lvl": "Level 4", "le": 79.9, "co2": 2.62, "ch": "increase", "pop": 4.18}, {"c": "Papua New Guinea", "r": "Asia", "inc": 4.19, "lvl": "Level 2", "le": 64.4, "co2": 0.911, "ch": "increase", "pop": 8.61}, {"c": "Paraguay", "r": "Americas", "inc": 12.8, "lvl": "Level 3", "le": 76.5, "co2": 1.07, "ch": "increase", "pop": 6.96}, {"c": "Peru", "r": "Americas", "inc": 12.8, "lvl": "Level 3", "le": 80.0, "co2": 1.74, "ch": "increase", "pop": 32.0}, {"c": "Philippines", "r": "Asia", "inc": 8.52, "lvl": "Level 3", "le": 71.6, "co2": 1.27, "ch": "increase", "pop": 107.0}, {"c": "Poland", "r": "Europe", "inc": 31.7, "lvl": "Level 4", "le": 78.0, "co2": 9.07, "ch": "increase", "pop": 37.9}, {"c": "Portugal", "r": "Europe", "inc": 34.0, "lvl": "Level 4", "le": 81.7, "co2": 4.97, "ch": "decrease", "pop": 10.3}, {"c": "Qatar", "r": "Asia", "inc": 91.0, "lvl": "Level 4", "le": 76.1, "co2": 38.0, "ch": "decrease", "pop": 2.78}, {"c": "Romania", "r": "Europe", "inc": 28.5, "lvl": "Level 4", "le": 75.5, "co2": 3.8, "ch": "decrease", "pop": 19.5}, {"c": "Russia", "r": "Europe", "inc": 26.7, "lvl": "Level 4", "le": 73.0, "co2": 11.7, "ch": "increase", "pop": 146.0}, {"c": "Rwanda", "r": "Africa", "inc": 2.09, "lvl": "Level 1", "le": 68.3, "co2": 0.0913, "ch": "increase", "pop": 12.3}, {"c": "Samoa", "r": "Asia", "inc": 6.39, "lvl": "Level 2", "le": 70.4, "co2": 1.32, "ch": "increase", "pop": 0.196}, {"c": "Sao Tome and Principe", "r": "Africa", "inc": 3.99, "lvl": "Level 2", "le": 70.7, "co2": 0.587, "ch": "increase", "pop": 0.211}, {"c": "Saudi Arabia", "r": "Asia", "inc": 47.6, "lvl": "Level 4", "le": 74.3, "co2": 18.4, "ch": "increase", "pop": 33.7}, {"c": "Senegal", "r": "Africa", "inc": 3.31, "lvl": "Level 2", "le": 68.0, "co2": 0.739, "ch": "increase", "pop": 15.9}, {"c": "Serbia", "r": "Europe", "inc": 17.5, "lvl": "Level 3", "le": 75.6, "co2": 5.17, "ch": "decrease", "pop": 8.8}, {"c": "Seychelles", "r": "Africa", "inc": 27.5, "lvl": "Level 4", "le": 73.5, "co2": 6.75, "ch": "decrease", "pop": 0.0971}, {"c": "Sierra Leone", "r": "Africa", "inc": 1.66, "lvl": "Level 1", "le": 61.2, "co2": 0.141, "ch": "increase", "pop": 7.65}, {"c": "Singapore", "r": "Asia", "inc": 98.2, "lvl": "Level 4", "le": 84.7, "co2": 7.1, "ch": "decrease", "pop": 5.76}, {"c": "Slovak Republic", "r": "Europe", "inc": 31.2, "lvl": "Level 4", "le": 77.5, "co2": 6.61, "ch": "decrease", "pop": 5.45}, {"c": "Slovenia", "r": "Europe", "inc": 38.0, "lvl": "Level 4", "le": 81.4, "co2": 6.95, "ch": "decrease", "pop": 2.08}, {"c": "Solomon Islands", "r": "Asia", "inc": 2.7, "lvl": "Level 2", "le": 59.0, "co2": 0.273, "ch": "decrease", "pop": 0.653}, {"c": "Somalia", "r": "Africa", "inc": 1.13, "lvl": "Level 1", "le": 57.9, "co2": 0.0466, "ch": "decrease", "pop": 15.0}, {"c": "South Africa", "r": "Africa", "inc": 13.9, "lvl": "Level 3", "le": 64.4, "co2": 8.1, "ch": "decrease", "pop": 57.8}, {"c": "South Korea", "r": "Asia", "inc": 42.0, "lvl": "Level 4", "le": 82.9, "co2": 12.9, "ch": "increase", "pop": 51.2}, {"c": "South Sudan", "r": "Africa", "inc": 2.01, "lvl": "Level 1", "le": 63.0, "co2": 0.171, "ch": "increase", "pop": 11.0}, {"c": "Spain", "r": "Europe", "inc": 40.3, "lvl": "Level 4", "le": 83.1, "co2": 5.75, "ch": "decrease", "pop": 46.7}, {"c": "Sri Lanka", "r": "Asia", "inc": 12.9, "lvl": "Level 3", "le": 77.2, "co2": 1.1, "ch": "increase", "pop": 21.2}, {"c": "St. Kitts and Nevis", "r": "Americas", "inc": 27.5, "lvl": "Level 4", "le": 72.1, "co2": 4.62, "ch": "increase", "pop": 0.0524}, {"c": "St. Lucia", "r": "Americas", "inc": 15.3, "lvl": "Level 3", "le": 75.1, "co2": 2.31, "ch": "decrease", "pop": 0.182}, {"c": "St. Vincent and the Grenadines", "r": "Americas", "inc": 12.5, "lvl": "Level 3", "le": 72.8, "co2": 2.03, "ch": "decrease", "pop": 0.11}, {"c": "Sudan", "r": "Africa", "inc": 4.37, "lvl": "Level 2", "le": 70.1, "co2": 0.504, "ch": "increase", "pop": 41.8}, {"c": "Suriname", "r": "Americas", "inc": 19.0, "lvl": "Level 3", "le": 72.6, "co2": 3.1, "ch": "decrease", "pop": 0.576}, {"c": "Sweden", "r": "Europe", "inc": 52.3, "lvl": "Level 4", "le": 82.7, "co2": 4.12, "ch": "decrease", "pop": 9.97}, {"c": "Switzerland", "r": "Europe", "inc": 70.6, "lvl": "Level 4", "le": 83.9, "co2": 4.33, "ch": "decrease", "pop": 8.53}, {"c": "Syria", "r": "Asia", "inc": 3.89, "lvl": "Level 2", "le": 73.2, "co2": 1.67, "ch": "decrease", "pop": 16.9}, {"c": "Taiwan", "r": "Asia", "inc": 51.9, "lvl": "Level 4", "le": 80.2, "co2": 11.6, "ch": "increase", "pop": 23.7}, {"c": "Tajikistan", "r": "Asia", "inc": 3.42, "lvl": "Level 2", "le": 69.2, "co2": 0.603, "ch": "increase", "pop": 9.1}, {"c": "Tanzania", "r": "Africa", "inc": 2.59, "lvl": "Level 1", "le": 66.7, "co2": 0.222, "ch": "increase", "pop": 56.3}, {"c": "Thailand", "r": "Asia", "inc": 18.1, "lvl": "Level 3", "le": 78.3, "co2": 4.15, "ch": "increase", "pop": 69.4}, {"c": "Timor-Leste", "r": "Asia", "inc": 3.09, "lvl": "Level 2", "le": 70.5, "co2": 0.412, "ch": "increase", "pop": 1.27}, {"c": "Togo", "r": "Africa", "inc": 2.06, "lvl": "Level 1", "le": 64.5, "co2": 0.434, "ch": "increase", "pop": 7.89}, {"c": "Tonga", "r": "Asia", "inc": 6.41, "lvl": "Level 2", "le": 72.9, "co2": 1.31, "ch": "increase", "pop": 0.103}, {"c": "Trinidad and Tobago", "r": "Americas", "inc": 26.3, "lvl": "Level 4", "le": 74.8, "co2": 31.3, "ch": "decrease", "pop": 1.39}, {"c": "Tunisia", "r": "Africa", "inc": 11.4, "lvl": "Level 3", "le": 77.5, "co2": 2.73, "ch": "increase", "pop": 11.6}, {"c": "Turkey", "r": "Europe", "inc": 28.3, "lvl": "Level 4", "le": 78.1, "co2": 5.2, "ch": "increase", "pop": 82.3}, {"c": "Turkmenistan", "r": "Asia", "inc": 14.8, "lvl": "Level 3", "le": 70.6, "co2": 13.7, "ch": "increase", "pop": 5.85}, {"c": "Tuvalu", "r": "Asia", "inc": 3.95, "lvl": "Level 2", "le": 67.8, "co2": 1.01, "ch": "decrease", "pop": 0.0115}, {"c": "Uganda", "r": "Africa", "inc": 2.13, "lvl": "Level 1", "le": 65.7, "co2": 0.135, "ch": "increase", "pop": 42.7}, {"c": "Ukraine", "r": "Europe", "inc": 12.3, "lvl": "Level 3", "le": 73.9, "co2": 5.09, "ch": "decrease", "pop": 44.2}, {"c": "United Arab Emirates", "r": "Asia", "inc": 67.0, "lvl": "Level 4", "le": 73.7, "co2": 21.4, "ch": "decrease", "pop": 9.63}, {"c": "United Kingdom", "r": "Europe", "inc": 46.9, "lvl": "Level 4", "le": 81.0, "co2": 5.65, "ch": "decrease", "pop": 67.1}, {"c": "United States", "r": "Americas", "inc": 61.6, "lvl": "Level 4", "le": 79.0, "co2": 16.6, "ch": "decrease", "pop": 327.0}, {"c": "Uruguay", "r": "Americas", "inc": 23.0, "lvl": "Level 3", "le": 77.5, "co2": 2.01, "ch": "decrease", "pop": 3.45}, {"c": "Uzbekistan", "r": "Asia", "inc": 7.08, "lvl": "Level 2", "le": 68.1, "co2": 2.81, "ch": "decrease", "pop": 32.5}, {"c": "Vanuatu", "r": "Asia", "inc": 3.09, "lvl": "Level 2", "le": 65.3, "co2": 0.529, "ch": "increase", "pop": 0.293}, {"c": "Venezuela", "r": "Americas", "inc": 12.4, "lvl": "Level 3", "le": 75.4, "co2": 4.81, "ch": "decrease", "pop": 28.9}, {"c": "Vietnam", "r": "Asia", "inc": 7.59, "lvl": "Level 2", "le": 74.3, "co2": 2.16, "ch": "increase", "pop": 95.5}, {"c": "Yemen", "r": "Asia", "inc": 2.66, "lvl": "Level 2", "le": 66.1, "co2": 0.356, "ch": "decrease", "pop": 28.5}, {"c": "Zambia", "r": "Africa", "inc": 3.52, "lvl": "Level 2", "le": 62.5, "co2": 0.302, "ch": "increase", "pop": 17.4}, {"c": "Zimbabwe", "r": "Africa", "inc": 3.92, "lvl": "Level 2", "le": 60.6, "co2": 0.85, "ch": "increase", "pop": 14.4}], "curve": {"x": [0.762, 0.795, 0.829, 0.865, 0.902, 0.941, 0.981, 1.024, 1.068, 1.114, 1.162, 1.212, 1.264, 1.318, 1.375, 1.434, 1.496, 1.56, 1.627, 1.698, 1.771, 1.847, 1.926, 2.009, 2.096, 2.186, 2.28, 2.378, 2.481, 2.588, 2.699, 2.815, 2.937, 3.063, 3.195, 3.332, 3.476, 3.626, 3.782, 3.945, 4.114, 4.292, 4.476, 4.669, 4.87, 5.08, 5.299, 5.527, 5.765, 6.013, 6.272, 6.542, 6.824, 7.117, 7.424, 7.743, 8.077, 8.425, 8.787, 9.166, 9.561, 9.972, 10.402, 10.849, 11.317, 11.804, 12.312, 12.842, 13.395, 13.972, 14.574, 15.201, 15.856, 16.538, 17.251, 17.993, 18.768, 19.576, 20.419, 21.298, 22.215, 23.172, 24.17, 25.211, 26.296, 27.428, 28.609, 29.841, 31.126, 32.466, 33.864, 35.323, 36.844, 38.43, 40.085, 41.811, 43.611, 45.489, 47.448, 49.491, 51.622, 53.844, 56.163, 58.581, 61.104, 63.735, 66.479, 69.341, 72.327, 75.441, 78.69, 82.078, 85.612, 89.299, 93.144, 97.154, 101.338, 105.701, 110.253, 115.0], "y": [58.55, 58.76, 58.97, 59.18, 59.39, 59.6, 59.81, 60.03, 60.24, 60.45, 60.66, 60.88, 61.09, 61.3, 61.52, 61.73, 61.95, 62.17, 62.38, 62.6, 62.82, 63.04, 63.27, 63.49, 63.72, 63.94, 64.17, 64.4, 64.63, 64.86, 65.1, 65.33, 65.57, 65.8, 66.03, 66.25, 66.47, 66.7, 66.92, 67.16, 67.39, 67.63, 67.88, 68.14, 68.41, 68.69, 68.98, 69.28, 69.54, 69.77, 70.03, 70.28, 70.52, 70.73, 70.98, 71.22, 71.41, 71.63, 71.83, 72.03, 72.18, 72.35, 72.5, 72.67, 72.82, 72.95, 73.09, 73.22, 73.36, 73.5, 73.65, 73.8, 73.94, 74.09, 74.23, 74.39, 74.59, 74.75, 74.97, 75.19, 75.39, 75.66, 75.93, 76.18, 76.52, 76.81, 77.13, 77.43, 77.72, 78.0, 78.27, 78.53, 78.78, 79.02, 79.25, 79.47, 79.69, 79.9, 80.11, 80.31, 80.52, 80.72, 80.93, 81.13, 81.33, 81.53, 81.72, 81.91, 82.1, 82.29, 82.47, 82.65, 82.83, 83.01, 83.18, 83.34, 83.51, 83.67, 83.83, 83.99], "lo": [56.76, 57.03, 57.3, 57.54, 57.79, 58.03, 58.28, 58.52, 58.77, 59.02, 59.27, 59.51, 59.76, 60.02, 60.28, 60.55, 60.81, 61.08, 61.35, 61.59, 61.86, 62.13, 62.39, 62.62, 62.89, 63.14, 63.37, 63.64, 63.86, 64.08, 64.29, 64.51, 64.74, 64.98, 65.16, 65.37, 65.59, 65.83, 66.07, 66.31, 66.56, 66.82, 67.09, 67.36, 67.57, 67.83, 68.09, 68.36, 68.61, 68.87, 69.17, 69.39, 69.6, 69.81, 70.06, 70.28, 70.48, 70.69, 70.91, 71.09, 71.26, 71.41, 71.57, 71.73, 71.87, 72.03, 72.18, 72.35, 72.52, 72.68, 72.87, 73.02, 73.19, 73.37, 73.54, 73.71, 73.89, 74.09, 74.35, 74.59, 74.85, 75.09, 75.35, 75.65, 76.0, 76.31, 76.62, 76.96, 77.28, 77.54, 77.81, 78.05, 78.33, 78.53, 78.77, 78.93, 79.12, 79.26, 79.42, 79.59, 79.73, 79.87, 80.02, 80.19, 80.3, 80.44, 80.54, 80.64, 80.74, 80.84, 80.96, 81.08, 81.19, 81.3, 81.4, 81.5, 81.59, 81.69, 81.78, 81.86], "hi": [60.96, 61.12, 61.28, 61.44, 61.6, 61.76, 61.92, 62.08, 62.24, 62.36, 62.48, 62.61, 62.78, 62.91, 63.04, 63.17, 63.31, 63.47, 63.61, 63.75, 63.94, 64.12, 64.3, 64.49, 64.67, 64.82, 65.0, 65.2, 65.42, 65.64, 65.84, 66.07, 66.29, 66.5, 66.72, 66.94, 67.15, 67.35, 67.58, 67.82, 68.05, 68.31, 68.56, 68.86, 69.15, 69.46, 69.76, 70.06, 70.33, 70.55, 70.76, 71.0, 71.28, 71.53, 71.8, 72.05, 72.29, 72.57, 72.85, 72.99, 73.12, 73.25, 73.36, 73.5, 73.62, 73.75, 73.9, 74.05, 74.19, 74.33, 74.51, 74.64, 74.75, 74.88, 75.02, 75.16, 75.3, 75.49, 75.66, 75.9, 76.13, 76.38, 76.62, 76.92, 77.23, 77.51, 77.83, 78.1, 78.36, 78.6, 78.82, 79.05, 79.33, 79.55, 79.82, 80.11, 80.37, 80.6, 80.86, 81.07, 81.34, 81.56, 81.82, 82.06, 82.37, 82.65, 82.92, 83.22, 83.47, 83.7, 83.92, 84.14, 84.4, 84.69, 84.98, 85.21, 85.42, 85.65, 85.92, 86.18]}, "gains": {"low": 12.4, "high": 11.1}};
+  const rows = D.rows, cv = D.curve;
+  const REG = ["Africa", "Americas", "Asia", "Europe"];
+  const LVL = ["Level 1", "Level 2", "Level 3", "Level 4"];
+  const regSel = new Set();
+  const S = { level: null, bb: null, brush: null, size: true, sort: "co2", dir: -1 };
+  const tipEl = document.getElementById("tip");
+  let sc = null, drag = null, raf = 0;
+
+  rows.forEach((r, i) => { r.i = i; const u = Math.sin((i + 1) * 12.9898) * 43758.5453; r.j = (u - Math.floor(u)) - 0.5; });
+  const byPop = [...rows].sort((a, b) => b.pop - a.pop);
+  const active = r => (regSel.size === 0 || regSel.has(r.r)) && (!S.level || r.lvl === S.level) && (!S.brush || S.brush.has(r.i));
+
+  const fmt = (v, d = 1) => v.toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: 0 });
+  const fmtPop = v => v < 1 ? v.toFixed(2) : v < 10 ? v.toFixed(1) : Math.round(v).toLocaleString("en-US");
+  function q(a, p) {
+    const s = [...a].sort((x, y) => x - y), i = (s.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i);
+    return s[lo] + (s[hi] - s[lo]) * (i - lo);
+  }
+  function shape(ch, r) {
+    r *= 1.15;
+    if (ch === "increase") return `M0,${-r * 1.2}L${r * 1.1},${r * 0.85}L${-r * 1.1},${r * 0.85}Z`;
+    return `M0,${r * 1.2}L${r * 1.1},${-r * 0.85}L${-r * 1.1},${-r * 0.85}Z`;
+  }
+  const rad = r => S.size ? 2.6 + 0.27 * Math.sqrt(r.pop) : 5;
+  const glyph = (ch, col) => `<svg width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true" style="width:14px;overflow:visible"><path d="${shape(ch, 5)}" fill="${col}"/></svg>`;
+
+  /* ---------- controls ---------- */
+  const regBox = document.getElementById("regChips"), lvlBox = document.getElementById("lvlChips");
+  regBox.innerHTML = REG.map(g => `<button class="chip" type="button" data-reg="${g}" aria-pressed="false">${g} <span style="opacity:.7">${rows.filter(r => r.r === g).length}</span></button>`).join("");
+  lvlBox.innerHTML = LVL.map(l => `<button class="chip" type="button" data-lvl="${l}" aria-pressed="false">${l}</button>`).join("");
+  regBox.addEventListener("click", e => {
+    const b = e.target.closest("[data-reg]"); if (!b) return;
+    const g = b.dataset.reg; regSel.has(g) ? regSel.delete(g) : regSel.add(g); schedule();
+  });
+  lvlBox.addEventListener("click", e => {
+    const b = e.target.closest("[data-lvl]"); if (!b) return;
+    S.level = S.level === b.dataset.lvl ? null : b.dataset.lvl; schedule();
+  });
+  document.getElementById("sizeTog").addEventListener("change", e => { S.size = e.target.checked; schedule(); });
+  document.getElementById("resetBtn").addEventListener("click", () => { regSel.clear(); S.level = null; S.bb = null; S.brush = null; schedule(); });
+  function updateControls() {
+    regBox.querySelectorAll("[data-reg]").forEach(b => b.setAttribute("aria-pressed", regSel.has(b.dataset.reg)));
+    lvlBox.querySelectorAll("[data-lvl]").forEach(b => b.setAttribute("aria-pressed", S.level === b.dataset.lvl));
+    document.getElementById("resetBtn").disabled = !(regSel.size || S.level || S.brush);
+  }
+
+  /* ---------- stats ---------- */
+  function renderStats() {
+    const a = rows.filter(active), n = a.length, med = k => n ? q(a.map(r => r[k]), 0.5) : null;
+    const up = a.filter(r => r.ch === "increase").length;
+    const cell = (k, v) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+    document.getElementById("stats").innerHTML =
+      cell("Countries", `${n} <small>of ${rows.length}</small>`) +
+      cell("Median income", n ? `${fmt(med("inc"))} <small>thousand</small>` : "n/a") +
+      cell("Median life expectancy", n ? `${fmt(med("le"))} <small>years</small>` : "n/a") +
+      cell("Median CO₂ per person", n ? `${fmt(med("co2"), 2)} <small>tonnes</small>` : "n/a") +
+      cell("CO₂ rising", n ? `${Math.round(up / n * 100)}% <small>(${up} of ${n})</small>` : "n/a");
+  }
+
+  /* ---------- scatter ---------- */
+  const LAB = ["China", "India", "United States", "Nigeria", "Qatar", "Lesotho"];
+  function renderScatter() {
+    const svg = document.getElementById("scSvg");
+    const W = Math.max(300, svg.parentNode.clientWidth), H = W < 520 ? 330 : 430;
+    const m = { l: 44, r: 12, t: 8, b: 44 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
+    const lo = Math.log10(0.65), hi = Math.log10(140), ymin = 49, ymax = 88;
+    const X = v => m.l + (Math.log10(v) - lo) / (hi - lo) * pw, Y = v => m.t + (ymax - v) / (ymax - ymin) * ph;
+    sc = { m, pw, ph, lo, hi, ymin, ymax, W, H };
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("height", H);
+    let g = "";
+    [1, 2, 5, 10, 20, 50, 100].forEach(t => { const x = X(t); g += `<line class="gl" x1="${x}" x2="${x}" y1="${m.t}" y2="${m.t + ph}"/><text class="tk" x="${x}" y="${m.t + ph + 16}" text-anchor="middle">${t}</text>`; });
+    for (let v = 50; v <= 85; v += 5) { const y = Y(v); g += `<line class="gl" x1="${m.l}" x2="${m.l + pw}" y1="${y}" y2="${y}"/><text class="tk" x="${m.l - 6}" y="${y + 4}" text-anchor="end">${v}</text>`; }
+    g += `<text class="axt" x="${m.l + pw / 2}" y="${H - 6}" text-anchor="middle">Income per person (thousands, log scale)</text>`;
+    g += `<text class="axt" transform="translate(12,${m.t + ph / 2}) rotate(-90)" text-anchor="middle">Life expectancy (years)</text>`;
+    const up = cv.x.map((x, i) => X(x).toFixed(1) + "," + Y(cv.hi[i]).toFixed(1));
+    const dn = cv.x.map((x, i) => X(x).toFixed(1) + "," + Y(cv.lo[i]).toFixed(1)).reverse();
+    g += `<polygon class="band" points="${up.concat(dn).join(" ")}"/>`;
+    g += `<polyline class="fit" points="${cv.x.map((x, i) => X(x).toFixed(1) + "," + Y(cv.y[i]).toFixed(1)).join(" ")}"/>`;
+    let off = "", on = "";
+    byPop.forEach(r => {
+      const a = active(r);
+      const s = `<path class="pt ${r.ch === "increase" ? "inc" : "dec"}${a ? "" : " off"}" data-i="${r.i}" transform="translate(${X(r.inc).toFixed(1)},${Y(r.le).toFixed(1)})" d="${shape(r.ch, rad(r))}"/>`;
+      a ? on += s : off += s;
+    });
+    g += off + on;
+    rows.filter(r => LAB.includes(r.c) && active(r)).forEach(r => {
+      const right = r.inc > 40, x = X(r.inc) + (right ? -1 : 1) * (rad(r) + 4);
+      g += `<text class="lab" x="${x.toFixed(1)}" y="${(Y(r.le) + 4).toFixed(1)}" text-anchor="${right ? "end" : "start"}">${r.c}</text>`;
+    });
+    if (S.bb) {
+      const b = S.bb, x0 = m.l + (b.x0 - lo) / (hi - lo) * pw, x1 = m.l + (b.x1 - lo) / (hi - lo) * pw;
+      g += `<rect class="brush" x="${x0}" y="${Y(b.y1)}" width="${x1 - x0}" height="${Y(b.y0) - Y(b.y1)}"/>`;
+    }
+    svg.innerHTML = g;
+  }
+
+  /* ---------- box + strip ---------- */
+  function renderBox() {
+    const svg = document.getElementById("bxSvg");
+    const W = Math.max(300, svg.parentNode.clientWidth), H = W < 520 ? 330 : 430;
+    const m = { l: 44, r: 10, t: 8, b: 64 }, pw = W - m.l - m.r, ph = H - m.t - m.b, band = pw / 4;
+    const lo = Math.log10(0.015), hi = Math.log10(60);
+    const Y = v => m.t + (hi - Math.log10(v)) / (hi - lo) * ph;
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("height", H);
+    let g = "";
+    [[0.1, "0.1"], [1, "1"], [10, "10"]].forEach(([v, t]) => { const y = Y(v); g += `<line class="gl" x1="${m.l}" x2="${m.l + pw}" y1="${y}" y2="${y}"/><text class="tk" x="${m.l - 6}" y="${y + 4}" text-anchor="end">${t}</text>`; });
+    g += `<text class="axt" transform="translate(12,${m.t + ph / 2}) rotate(-90)" text-anchor="middle">CO₂ per person (tonnes, log scale)</text>`;
+    const bw = Math.min(48, band * 0.4);
+    let marks = "", labels = "";
+    LVL.forEach((L, idx) => {
+      const cx = m.l + band * (idx + 0.5), all = rows.filter(r => r.lvl === L), vals = all.map(r => r.co2);
+      const q1 = q(vals, 0.25), md = q(vals, 0.5), q3 = q(vals, 0.75), iqr = q3 - q1;
+      const wl = Math.min(...vals.filter(v => v >= q1 - 1.5 * iqr)), wh = Math.max(...vals.filter(v => v <= q3 + 1.5 * iqr));
+      g += `<rect class="bandhit" data-level="${L}" x="${m.l + band * idx}" y="${m.t}" width="${band}" height="${ph}"/>`;
+      if (S.level === L) g += `<rect class="bandsel" x="${m.l + band * idx}" y="${m.t}" width="${band}" height="${ph}"/>`;
+      g += `<line class="whisk" x1="${cx}" x2="${cx}" y1="${Y(wl)}" y2="${Y(wh)}"/><line class="whisk" x1="${cx - bw / 3}" x2="${cx + bw / 3}" y1="${Y(wl)}" y2="${Y(wl)}"/><line class="whisk" x1="${cx - bw / 3}" x2="${cx + bw / 3}" y1="${Y(wh)}" y2="${Y(wh)}"/>`;
+      g += `<rect class="box" x="${cx - bw / 2}" y="${Y(q3)}" width="${bw}" height="${Y(q1) - Y(q3)}"/><line class="med" x1="${cx - bw / 2}" x2="${cx + bw / 2}" y1="${Y(md)}" y2="${Y(md)}"/>`;
+      const act = all.filter(active);
+      if (act.length && act.length < all.length) {
+        const am = q(act.map(r => r.co2), 0.5);
+        g += `<line class="amed" x1="${cx - bw * 0.85}" x2="${cx + bw * 0.85}" y1="${Y(am)}" y2="${Y(am)}"/>`;
+      }
+      all.forEach(r => {
+        const x = cx + r.j * band * 0.8, y = Y(r.co2), a = active(r);
+        const s = `<path class="pt ${r.ch === "increase" ? "inc" : "dec"}${a ? "" : " off"}" data-i="${r.i}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})" d="${shape(r.ch, 4.4)}"/>`;
+        marks += a ? "" : s;
+      });
+      all.forEach(r => {
+        if (!active(r)) return;
+        const x = cx + r.j * band * 0.8, y = Y(r.co2);
+        marks += `<path class="pt ${r.ch === "increase" ? "inc" : "dec"}" data-i="${r.i}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})" d="${shape(r.ch, 4.4)}"/>`;
+      });
+      const top = act.length ? act.reduce((a, b) => b.co2 > a.co2 ? b : a) : null;
+      if (top) {
+        const x = cx + top.j * band * 0.8, right = x > W - m.r - 80;
+        labels += `<text class="lab" x="${(x + (right ? -8 : 8)).toFixed(1)}" y="${(Y(top.co2) + 4).toFixed(1)}" text-anchor="${right ? "end" : "start"}">${top.c}</text>`;
+      }
+      const sel = S.level === L ? " sel" : "", ty = m.t + ph + 16;
+      g += `<g data-level="${L}"><text class="lv${sel}" x="${cx}" y="${ty}" text-anchor="middle">${L}</text><text class="lv sm" x="${cx}" y="${ty + 14}" text-anchor="middle">n = ${all.length}</text><text class="lv sm" x="${cx}" y="${ty + 28}" text-anchor="middle">median ${fmt(md, 2)} t</text></g>`;
+    });
+    svg.innerHTML = g + marks + labels;
+  }
+
+  /* ---------- table ---------- */
+  const COLS = [["c", "Country", 0], ["r", "Region", 0], ["lvl", "Level", 0], ["inc", "Income (thousands)", 1], ["le", "Life exp. (yrs)", 1], ["co2", "CO₂ (t per person)", 1], ["ch", "CO₂ change", 0], ["pop", "Population (M)", 1]];
+  function renderTable() {
+    const a = rows.filter(active).sort((x, y) => { const k = S.sort, va = x[k], vb = y[k]; return (typeof va === "string" ? va.localeCompare(vb) : va - vb) * S.dir; });
+    document.getElementById("tblSum").textContent = `Table view (${a.length} countries)`;
+    const head = COLS.map(([k, t, n]) => `<th class="${n ? "n" : ""}" ${S.sort === k ? `aria-sort="${S.dir > 0 ? "ascending" : "descending"}"` : ""}><button type="button" data-sort="${k}">${t}${S.sort === k ? (S.dir > 0 ? " ▲" : " ▼") : ""}</button></th>`).join("");
+    const body = a.map(r => `<tr><td>${r.c}</td><td>${r.r}</td><td>${r.lvl}</td><td class="n">${fmt(r.inc)}</td><td class="n">${fmt(r.le)}</td><td class="n">${fmt(r.co2, 2)}</td><td>${r.ch}</td><td class="n">${fmtPop(r.pop)}</td></tr>`).join("");
+    document.getElementById("tbl").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+  }
+  document.getElementById("tbl").addEventListener("click", e => {
+    const b = e.target.closest("[data-sort]"); if (!b) return;
+    const k = b.dataset.sort; S.dir = S.sort === k ? -S.dir : (k === "c" || k === "r" || k === "lvl" || k === "ch" ? 1 : -1); S.sort = k; renderTable();
+  });
+
+  /* ---------- legends ---------- */
+  const chLegend = `<span>${glyph("decrease", "var(--dec)")}CO₂ decreased</span><span>${glyph("increase", "var(--inc)")}CO₂ increased</span>`;
+  document.getElementById("scLegend").innerHTML = chLegend + `<span id="sizeLg"></span>`;
+  document.getElementById("bxLegend").innerHTML =
+    chLegend +
+    `<span><svg width="22" height="8" aria-hidden="true" style="width:22px;overflow:visible"><line x1="0" x2="22" y1="4" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3"/></svg>Median of selection</span>`;
+  function renderSizeLegend() {
+    const el = document.getElementById("sizeLg");
+    if (!S.size) { el.innerHTML = ""; return; }
+    el.innerHTML = "Size = population " + [1, 10, 100, 1000].map(p => { const r = 2.6 + 0.27 * Math.sqrt(p), w = 2 * r * 1.15 * 1.4 + 4; return `<svg width="${w}" height="${w}" viewBox="${-w / 2} ${-w / 2} ${w} ${w}" aria-hidden="true" style="width:${w}px;overflow:visible"><path d="${shape("increase", r)}" fill="none" stroke="currentColor"/></svg><span style="gap:0">${p >= 1000 ? "1,000" : p} M</span>`; }).join("");
+  }
+
+  /* ---------- tooltip + hover link ---------- */
+  function tipHTML(r) {
+    return `<strong>${r.c}</strong><span class="m">${r.r} · ${r.lvl}</span><dl>` +
+      `<dt>Income</dt><dd>${fmt(r.inc)} thousand</dd><dt>Life expectancy</dt><dd>${fmt(r.le)} years</dd>` +
+      `<dt>CO₂ per person</dt><dd>${fmt(r.co2, 2)} t</dd><dt>CO₂ change</dt><dd>${r.ch}</dd><dt>Population</dt><dd>${fmtPop(r.pop)} M</dd></dl>`;
+  }
+  function placeTip(e) {
+    const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+    let x = e.clientX + 14, y = e.clientY + 14;
+    if (x + w > window.innerWidth - 8) x = e.clientX - w - 14;
+    if (y + h > window.innerHeight - 8) y = e.clientY - h - 14;
+    tipEl.style.left = Math.max(8, x) + "px"; tipEl.style.top = Math.max(8, y) + "px";
+  }
+  function wire(svg) {
+    svg.addEventListener("pointerover", e => {
+      const t = e.target.closest && e.target.closest("[data-i]"); if (!t || drag) return;
+      const i = +t.dataset.i; tipEl.innerHTML = tipHTML(rows[i]); tipEl.hidden = false; placeTip(e);
+      document.querySelectorAll(`[data-i="${i}"]`).forEach(n => n.classList.add("hl"));
+    });
+    svg.addEventListener("pointermove", e => { if (!tipEl.hidden) placeTip(e); });
+    svg.addEventListener("pointerout", e => {
+      const t = e.target.closest && e.target.closest("[data-i]"); if (!t) return;
+      tipEl.hidden = true; document.querySelectorAll(".pt.hl").forEach(n => n.classList.remove("hl"));
+    });
+  }
+  const scSvg = document.getElementById("scSvg"), bxSvg = document.getElementById("bxSvg");
+  wire(scSvg); wire(bxSvg);
+  bxSvg.addEventListener("click", e => {
+    const t = e.target.closest("[data-level]"); if (!t) return;
+    S.level = S.level === t.dataset.level ? null : t.dataset.level; schedule();
+  });
+
+  /* ---------- brushing on the scatter ---------- */
+  function plotPos(e) { const r = scSvg.getBoundingClientRect(); return [(e.clientX - r.left) * (sc.W / r.width), (e.clientY - r.top) * (sc.H / r.height)]; }
+  scSvg.addEventListener("pointerdown", e => {
+    if (!sc || e.button > 0) return;
+    const [px, py] = plotPos(e), m = sc.m;
+    if (px < m.l || px > m.l + sc.pw || py < m.t || py > m.t + sc.ph) return;
+    drag = { px, py, moved: false }; tipEl.hidden = true;
+    try { scSvg.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  scSvg.addEventListener("pointermove", e => {
+    if (!drag) return;
+    let [qx, qy] = plotPos(e); const m = sc.m;
+    qx = Math.min(Math.max(qx, m.l), m.l + sc.pw); qy = Math.min(Math.max(qy, m.t), m.t + sc.ph);
+    if (!drag.moved && Math.abs(qx - drag.px) < 4 && Math.abs(qy - drag.py) < 4) return;
+    drag.moved = true;
+    const ix = p => sc.lo + (p - m.l) / sc.pw * (sc.hi - sc.lo), iy = p => sc.ymax - (p - m.t) / sc.ph * (sc.ymax - sc.ymin);
+    const bb = { x0: ix(Math.min(drag.px, qx)), x1: ix(Math.max(drag.px, qx)), y1: iy(Math.min(drag.py, qy)), y0: iy(Math.max(drag.py, qy)) };
+    S.bb = bb;
+    S.brush = new Set(rows.filter(r => { const lx = Math.log10(r.inc); return lx >= bb.x0 && lx <= bb.x1 && r.le >= bb.y0 && r.le <= bb.y1; }).map(r => r.i));
+    schedule();
+  });
+  const endDrag = clear => e => {
+    if (!drag) return;
+    if (clear && !drag.moved) { S.bb = null; S.brush = null; schedule(); }
+    drag = null;
+  };
+  scSvg.addEventListener("pointerup", endDrag(true));
+  scSvg.addEventListener("pointercancel", endDrag(false));
+
+  /* ---------- render loop ---------- */
+  function renderAll() {
+    raf = 0; updateControls(); renderStats(); renderScatter(); renderBox(); renderSizeLegend(); renderTable();
+  }
+  function schedule() { if (!raf) raf = requestAnimationFrame(renderAll); }
+  renderAll();
+  let lastW = 0;
+  const ro = new ResizeObserver(() => { const w = document.querySelector(".charts").clientWidth; if (w !== lastW) { lastW = w; schedule(); } });
+  ro.observe(document.querySelector(".charts"));
+})();
+</script>
+
+</body></html>
